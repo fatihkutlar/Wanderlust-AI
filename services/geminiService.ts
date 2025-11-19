@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { Place, ItineraryItem } from "../types";
+import { Place, ItineraryItem, Pace } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -113,16 +113,25 @@ export const fetchPlacesWithGemini = async (
 export const generateItineraryWithGemini = async (
   city: string,
   selectedPlaces: Place[],
-  startTime: string
+  startTime: string,
+  endTime: string,
+  pace: Pace
 ): Promise<ItineraryItem[]> => {
   try {
     const placesList = selectedPlaces.map(p => 
       `${p.name} (${p.category}) at ${p.address || 'coordinates: ' + p.coordinates?.lat + ',' + p.coordinates?.lng}`
     ).join("; ");
 
+    const paceInstruction = pace === 'chill' 
+      ? "Relaxed pace. Allow extra time at each stop. Don't rush."
+      : pace === 'packed' 
+      ? "Fast pace. Fit as much as possible efficiently. Short stops."
+      : "Balanced pace. Standard tourist duration.";
+
     const prompt = `
-      Build a logical, time-optimized 1-day itinerary for ${city} starting at ${startTime}.
+      Build a logical, time-optimized 1-day itinerary for ${city} starting at ${startTime} and ending around ${endTime}.
       User wants to visit: ${placesList}.
+      Pace preference: ${paceInstruction}.
       
       Use Google Maps to:
       1. Order places geographically to minimize travel.
@@ -131,8 +140,8 @@ export const generateItineraryWithGemini = async (
       
       Rules:
       - Don't overlap times.
-      - Account for ~1.5h at museums, ~45m at cafes/landmarks.
-      - End by 22:00 if possible.
+      - Account for ~1.5h at museums, ~45m at cafes/landmarks (adjusted by pace).
+      - Respect the end time of ${endTime}.
       
       CRITICAL ERROR HANDLING:
       - If the Google Maps tool fails to return directions for a specific leg, YOU MUST ESTIMATE the travel time (e.g. 15 mins) and mode (e.g. "transit") based on general city knowledge or straight-line distance.
@@ -164,6 +173,8 @@ export const generateItineraryWithGemini = async (
       },
     });
 
+    console.log("Raw Gemini Response (Itinerary):", response.text);
+
     const cleanedText = cleanJson(response.text || "[]");
     let rawData;
     try {
@@ -171,6 +182,12 @@ export const generateItineraryWithGemini = async (
     } catch (e) {
         console.error("Failed to parse Itinerary JSON:", cleanedText);
         throw new Error("Invalid JSON response for Itinerary");
+    }
+
+    if (!Array.isArray(rawData)) {
+       console.warn("Itinerary data is not an array, attempting fallback/fix");
+       // If somehow we got an object wrapper, try to extract array or return empty
+       return [];
     }
 
     return rawData.map((item: any, index: number) => ({
@@ -190,6 +207,48 @@ export const generateItineraryWithGemini = async (
 
   } catch (error) {
     console.error("Error generating itinerary:", error);
-    throw error;
+    return createFallbackItinerary(selectedPlaces, startTime);
   }
+};
+
+// Fallback generator in case API/Tools fail completely
+const createFallbackItinerary = (places: Place[], startTime: string): ItineraryItem[] => {
+  console.log("Using fallback itinerary generator");
+  let currentHour = parseInt(startTime.split(':')[0]);
+  let currentMinute = parseInt(startTime.split(':')[1]);
+
+  return places.map((place, index) => {
+    const startStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+    
+    // Add 1.5 hours per place
+    currentHour += 1;
+    currentMinute += 30;
+    if (currentMinute >= 60) {
+      currentHour += 1;
+      currentMinute -= 60;
+    }
+    const endStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
+    // Add travel time gap (30 mins)
+    currentMinute += 30;
+    if (currentMinute >= 60) {
+      currentHour += 1;
+      currentMinute -= 60;
+    }
+
+    return {
+      id: `fallback-${index}`,
+      startTime: startStr,
+      endTime: endStr,
+      placeName: place.name,
+      category: place.category,
+      description: place.description,
+      transportToNext: index < places.length - 1 ? {
+        type: 'transit',
+        details: 'Transit to next stop',
+        durationMinutes: 30
+      } : undefined,
+      coordinates: place.coordinates
+    };
+  });
 };

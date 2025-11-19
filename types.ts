@@ -32,11 +32,15 @@ export interface ItineraryItem {
   };
 }
 
+export type Pace = 'chill' | 'balanced' | 'packed';
+
 export interface UserPreferences {
   city: string;
   interests: string[];
   date: string;
   startTime: string;
+  endTime: string;
+  pace: Pace;
 }
 
 export type AppStep = 'onboarding' | 'loading_places' | 'selection' | 'generating_route' | 'itinerary';

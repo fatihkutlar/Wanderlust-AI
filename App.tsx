@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { MapPin, ArrowRight, Calendar, RotateCcw, Search, Sparkles, Lightbulb, Info } from 'lucide-react';
+import { MapPin, ArrowRight, Calendar, RotateCcw, Search, Sparkles, Lightbulb, Info, Clock, ChevronDown } from 'lucide-react';
 import LoadingOverlay from './components/LoadingOverlay';
 import InterestPicker from './components/InterestPicker';
 import PlaceCard from './components/PlaceCard';
 import Timeline from './components/Timeline';
-import { AppStep, Place, ItineraryItem } from './types';
+import { AppStep, Place, ItineraryItem, Pace } from './types';
 import { fetchPlacesWithGemini, generateItineraryWithGemini } from './services/geminiService';
-import { GOOGLE_MAPS_API_KEY } from './constants';
+import { GOOGLE_MAPS_API_KEY, QUICK_CITIES, PACING_OPTIONS } from './constants';
 
 // Skeleton Component for loading states
 const SkeletonGrid = () => (
@@ -26,10 +26,15 @@ const SkeletonGrid = () => (
 
 const App: React.FC = () => {
   const [step, setStep] = useState<AppStep>('onboarding');
+  
+  // Form State
   const [city, setCity] = useState('');
   const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('22:00');
+  const [pace, setPace] = useState<Pace>('balanced');
   const [interests, setInterests] = useState<string[]>([]);
   
+  // Data State
   const [places, setPlaces] = useState<Place[]>([]);
   const [cityInsight, setCityInsight] = useState<string>('');
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<string[]>([]);
@@ -60,13 +65,24 @@ const App: React.FC = () => {
 
     setLoadingMsg('AI is optimizing your travel route...');
     setStep('generating_route');
+    
+    // Log payload for debugging
+    console.log("Generating Route Request:", {
+        city,
+        selectedPlaceCount: selectedPlaceIds.length,
+        startTime,
+        endTime,
+        pace,
+        selectedPlaceIds
+    });
 
     try {
       const selectedPlaces = places.filter(p => selectedPlaceIds.includes(p.id));
-      const generatedItinerary = await generateItineraryWithGemini(city, selectedPlaces, startTime);
+      const generatedItinerary = await generateItineraryWithGemini(city, selectedPlaces, startTime, endTime, pace);
       setItinerary(generatedItinerary);
       setStep('itinerary');
     } catch (e) {
+      console.error("Route generation failed in UI layer:", e);
       alert('Failed to generate itinerary. Please try again.');
       setStep('selection');
     }
@@ -86,21 +102,9 @@ const App: React.FC = () => {
     setItinerary([]);
     setPlaces([]);
     setCityInsight('');
-  };
-
-  // Helper to build Google Maps Embed URL for directions (Fallback if needed, but Map is removed from UI)
-  const getMapEmbedUrl = () => {
-    if (itinerary.length < 2 || !GOOGLE_MAPS_API_KEY) return '';
-    
-    const origin = encodeURIComponent(itinerary[0].placeName + ' ' + city);
-    const destination = encodeURIComponent(itinerary[itinerary.length - 1].placeName + ' ' + city);
-    
-    // Intermediate waypoints (exclude first and last)
-    const waypoints = itinerary.slice(1, -1)
-      .map(item => encodeURIComponent(item.placeName + ' ' + city))
-      .join('|');
-
-    return `https://www.google.com/maps/embed/v1/directions?key=${GOOGLE_MAPS_API_KEY}&origin=${origin}&destination=${destination}&waypoints=${waypoints}&mode=transit`;
+    setPace('balanced');
+    setStartTime('09:00');
+    setEndTime('22:00');
   };
 
   return (
@@ -127,58 +131,120 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 pb-24">
+      <main className="max-w-3xl mx-auto px-4 py-6 pb-32">
         
-        {/* STEP 1: ONBOARDING */}
+        {/* STEP 1: ONBOARDING - New iOS Panel Style */}
         {step === 'onboarding' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
-            <div className="text-center space-y-2 pt-8">
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-500">
+            
+            <div className="text-center space-y-1.5 pt-4 pb-8">
               <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Where to next?</h2>
-              <p className="text-gray-500">Build your perfect day in seconds.</p>
+              <p className="text-gray-500 font-medium">Build your perfect day in seconds.</p>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-6">
-              {/* City Input */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Destination</label>
-                <div className="relative group">
-                  <Search className="absolute left-4 top-3.5 text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors" />
-                  <input 
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Search city..."
-                    className="w-full pl-11 pr-4 py-3.5 bg-gray-100/50 border-none rounded-2xl text-lg font-medium focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all placeholder:text-gray-400"
-                  />
+            {/* Main Card Container */}
+            <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 overflow-hidden max-w-xl mx-auto">
+              <div className="p-6 md:p-8 space-y-8">
+                
+                {/* Destination Section */}
+                <div className="space-y-3">
+                  <label className="flex items-center text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <MapPin className="w-3 h-3 mr-1" /> Destination
+                  </label>
+                  <div className="relative group">
+                    <Search className="absolute left-4 top-3.5 text-gray-400 w-5 h-5 group-focus-within:text-blue-500 transition-colors" />
+                    <input 
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Search a city (e.g. Berlin, Paris)"
+                      className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-lg font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all placeholder:text-gray-400 placeholder:font-normal outline-none"
+                    />
+                  </div>
+                  {/* Quick Chips */}
+                  <div className="flex flex-wrap gap-2">
+                    {QUICK_CITIES.map(quickCity => (
+                      <button
+                        key={quickCity}
+                        onClick={() => setCity(quickCity)}
+                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-full transition-colors"
+                      >
+                        {quickCity}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Time Input */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Start Time</label>
-                <input 
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-4 py-3.5 bg-gray-100/50 border-none rounded-2xl text-lg font-medium focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all"
-                />
-              </div>
+                {/* Time & Pace Section */}
+                <div className="space-y-3">
+                   <label className="flex items-center text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <Clock className="w-3 h-3 mr-1" /> Time & Pace
+                  </label>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 focus-within:bg-white transition-all">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Start</label>
+                      <input 
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="w-full bg-transparent border-none p-0 text-base font-semibold text-gray-900 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+                     <div className="bg-gray-50 border border-gray-100 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 focus-within:bg-white transition-all">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">End</label>
+                      <input 
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full bg-transparent border-none p-0 text-base font-semibold text-gray-900 focus:ring-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
 
-              {/* Interests */}
-              <div className="space-y-3">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider ml-1">Interests</label>
-                <InterestPicker selected={interests} onChange={setInterests} />
+                  {/* Pace Selector */}
+                  <div className="bg-gray-100 p-1 rounded-xl flex relative">
+                     {PACING_OPTIONS.map((option) => {
+                       const isSelected = pace === option.id;
+                       return (
+                         <button
+                           key={option.id}
+                           onClick={() => setPace(option.id)}
+                           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 z-10 ${isSelected ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                         >
+                           {option.label}
+                         </button>
+                       );
+                     })}
+                  </div>
+                </div>
+
+                {/* Interests Section */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <label className="flex items-center text-xs font-bold text-gray-400 uppercase tracking-wider">
+                      <Sparkles className="w-3 h-3 mr-1" /> Interests
+                    </label>
+                    <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      Pick at least one
+                    </span>
+                  </div>
+                  <div className="bg-gray-50/50 rounded-2xl p-1 border border-gray-100">
+                    <InterestPicker selected={interests} onChange={setInterests} />
+                  </div>
+                </div>
+
               </div>
             </div>
             
-            {/* Floating Action Button */}
-            <div className="fixed bottom-8 left-0 right-0 px-6 flex justify-center z-30">
+            {/* Sticky CTA */}
+            <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-md border-t border-gray-200 z-50 flex justify-center pb-8">
                 <button 
                   onClick={handleStartDiscovery}
                   disabled={!city || interests.length === 0}
-                  className="w-full max-w-md bg-black hover:bg-gray-900 text-white py-4 rounded-2xl font-bold text-lg shadow-2xl shadow-black/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center active:scale-95 transition-all"
+                  className="w-full max-w-xl bg-blue-600 hover:bg-blue-700 text-white h-14 rounded-2xl font-bold text-lg shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center active:scale-95 transition-all"
                 >
-                  Start Planning <ArrowRight className="ml-2 w-5 h-5" />
+                  Plan My Day <ArrowRight className="ml-2 w-5 h-5" />
                 </button>
             </div>
           </div>
@@ -264,7 +330,7 @@ const App: React.FC = () => {
                    <h2 className="text-3xl font-bold text-gray-900 tracking-tight">{city}</h2>
                    <div className="flex items-center justify-center mt-2 space-x-2 text-sm text-gray-500">
                       <Calendar className="w-4 h-4" />
-                      <span>1-Day Plan</span>
+                      <span>1-Day Plan • {pace.charAt(0).toUpperCase() + pace.slice(1)} Pace</span>
                    </div>
                 </div>
 

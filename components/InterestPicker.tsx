@@ -24,13 +24,13 @@ const InterestPicker: React.FC<InterestPickerProps> = ({ selected, onChange }) =
             key={interest.id}
             onClick={() => toggleInterest(interest.id)}
             className={`
-              flex items-center p-3 rounded-xl text-sm font-medium transition-all duration-200
+              flex items-center p-3 rounded-xl text-sm font-semibold transition-all duration-200 border
               ${isActive 
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-200 scale-[1.02]' 
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-100'}
+                ? 'bg-blue-600 text-white border-transparent shadow-md shadow-blue-200 scale-[1.02]' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300'}
             `}
           >
-            <span className="mr-2 text-lg">{interest.icon}</span>
+            <span className={`mr-2 text-lg ${isActive ? 'text-white' : 'opacity-80'}`}>{interest.icon}</span>
             {interest.label}
           </button>
         );

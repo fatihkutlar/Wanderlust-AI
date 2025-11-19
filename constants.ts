@@ -1,11 +1,21 @@
+import { Pace } from "./types";
+
 export const INTERESTS = [
-  { id: 'history', label: 'History & Landmarks', icon: '🏛️' },
+  { id: 'history', label: 'History', icon: '🏛️' },
   { id: 'art', label: 'Art & Museums', icon: '🎨' },
   { id: 'food', label: 'Local Food', icon: '🍝' },
-  { id: 'cafe', label: 'Cafes & Coffee', icon: '☕' },
-  { id: 'nature', label: 'Parks & Nature', icon: '🌳' },
+  { id: 'cafe', label: 'Cafes', icon: '☕' },
+  { id: 'nature', label: 'Nature', icon: '🌳' },
   { id: 'shopping', label: 'Shopping', icon: '🛍️' },
   { id: 'nightlife', label: 'Nightlife', icon: '🥂' },
+];
+
+export const QUICK_CITIES = ['Berlin', 'Paris', 'Istanbul', 'Tokyo'];
+
+export const PACING_OPTIONS: { id: Pace; label: string }[] = [
+  { id: 'chill', label: 'Chill' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'packed', label: 'Packed' },
 ];
 
 export const MOCK_IMAGES = [
