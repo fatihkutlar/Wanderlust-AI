@@ -1,0 +1,5 @@
+{
+  "name": "Wanderlust AI",
+  "description": "An intelligent iOS-style travel planner that builds the perfect 1-day itinerary using Google Maps and Gemini.",
+  "requestFramePermissions": []
+}
